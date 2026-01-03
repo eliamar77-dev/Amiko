@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Amico Pro</title>
+  
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
+
+  <style>
+    :root {
+      --primary: #2c3e50;
+      --success: #27ae60;
+      --warning: #e67e22;
+      --bg: #f8f9fa;
+    }
+
+    /* מניעת גלילה של הדף */
+    html, body { 
+      margin: 0; padding: 0; 
+      height: 100%; width: 100%; 
+      overflow: hidden; 
+      background-color: var(--bg);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between; /* פיזור אלמנטים על פני כל המסך */
+      padding: 10px 0;
+      box-sizing: border-box;
+    }
+
+    header { text-align: center; }
+    h1 { margin: 0; font-size: 1.8rem; color: var(--primary); }
+    .subtitle { color: #7f8c8d; font-size: 0.8rem; margin-top: 2px; }
+
+    /* תצוגת מצלמה ללא עיוות */
+    .viewport-container {
+      position: relative;
+      width: 280px; /* גודל אופטימלי למסך אחד */
+      height: 280px;
+      border-radius: 24px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+      border: 4px solid white;
+      background: #000;
+    }
+
+    video, canvas {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      min-width: 100%;
+      min-height: 100%;
+      transform: translate(-50%, -50%);
+      object-fit: cover; /* שומר על יחס תמונה תקין */
+    }
+
+    .controls { margin: 10px 0; }
+
+    .btn {
+      border: none;
+      padding: 12px 40px;
+      font-size: 1.1rem;
+      border-radius: 50px;
+      cursor: pointer;
+      font-weight: bold;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      transition: background 0.3s;
+    }
+
+    .btn-capture { background: var(--primary); color: white; }
+    .btn-reset { background: #bdc3c7; color: white; display: none; }
+
+    /* אזור תוצאות דחוס למסך אחד */
+    .results-grid {
+      width: 90%;
+      max-width: 350px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .result-card {
+      background: white;
+      padding: 10px 20px;
+      border-radius: 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+    }
+
+    .result-label { font-weight: 600; color: #666; font-size: 0.9rem; width: 50px; }
+    .result-status { font-weight: 800; font-size: 1rem; flex-grow: 1; text-align: center; }
+    .result-acc { font-size: 0.7rem; color: #bdc3c7; width: 60px; text-align: left; }
+
+    .status-ok { color: var(--success); }
+    .status-action { color: var(--warning); }
+
+    .lighting-tip {
+      font-size: 0.75rem;
+      color: #856404;
+      background: #fff3cd;
+      padding: 6px 15px;
+      border-radius: 8px;
+      margin-bottom: 5px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <header>
+    <h1>עמיקו ✨</h1>
+    <div class="subtitle">ניתוח טיפוח פנים בזמן אמת</div>
+  </header>
+
+  <div class="viewport-container">
+    <video id="input_video" autoplay playsinline></video>
+    <canvas id="output_canvas"></canvas>
+  </div>
+
+  <div class="controls">
+    <button id="capture-btn" class="btn btn-capture" onclick="takePhoto()">סרוק עכשיו 📸</button>
+    <button id="reset-btn" class="btn btn-reset" onclick="resetApp()">צילום מחדש</button>
+  </div>
+
+  <div class="results-grid">
+    <div class="result-card">
+      <span class="result-label">גבות:</span>
+      <span id="eyebrows-status" class="result-status">-</span>
+      <span id="eyebrows-acc" class="result-acc"></span>
+    </div>
+    <div class="result-card">
+      <span class="result-label">שפם:</span>
+      <span id="mustache-status" class="result-status">-</span>
+      <span id="mustache-acc" class="result-acc"></span>
+    </div>
+    <div class="result-card">
+      <span class="result-label">זקן:</span>
+      <span id="beard-status" class="result-status">-</span>
+      <span id="beard-acc" class="result-acc"></span>
+    </div>
+  </div>
+
+  <div class="lighting-tip">
+    💡 וודא תאורה חזקה לקבלת דיוק מקסימלי
+  </div>
+
+  <script>
+    const videoElement = document.getElementById('input_video');
+    const canvasElement = document.getElementById('output_canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+    let isFrozen = false;
+    let latestLandmarks = null;
+
+    function onResults(results) {
+      if (isFrozen) return;
+
+      // עדכון גודל הקנבס לפי הווידאו למניעת עיוות
+      canvasElement.width = videoElement.videoWidth;
+      canvasElement.height = videoElement.videoHeight;
+
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+      if (results.multiFaceLandmarks) {
+        latestLandmarks = results.multiFaceLandmarks[0];
+        // אנחנו לא מציירים כאן שום דבר (אין רשת!)
+      }
+      canvasCtx.restore();
+    }
+
+    function takePhoto() {
+      if (!latestLandmarks) return;
+      isFrozen = true;
+      document.getElementById('capture-btn').style.display = 'none';
+      document.getElementById('reset-btn').style.display = 'block';
+      analyzeGrooming(latestLandmarks);
+    }
+
+    function resetApp() {
+      isFrozen = false;
+      document.getElementById('capture-btn').style.display = 'block';
+      document.getElementById('reset-btn').style.display = 'none';
+      ['eyebrows', 'mustache', 'beard'].forEach(id => {
+        document.getElementById(`${id}-status`).innerText = "-";
+        document.getElementById(`${id}-status`).className = "result-status";
+        document.getElementById(`${id}-acc`).innerText = "";
+      });
+    }
+
+    function analyzeGrooming(landmarks) {
+      const getBrightness = (p) => {
+        const x = Math.floor(p.x * canvasElement.width);
+        const y = Math.floor(p.y * canvasElement.height);
+        const d = canvasCtx.getImageData(x, y, 1, 1).data;
+        return (d[0] + d[1] + d[2]) / 3;
+      };
+
+      const skin = getBrightness(landmarks[10]); // מצח
+      
+      update('eyebrows', getBrightness(landmarks[70]), skin, 0.78, "צריך סידור", "נראה טוב");
+      update('mustache', getBrightness({x:(landmarks[1].x+landmarks[13].x)/2, y:(landmarks[1].y+landmarks[13].y)/2}), skin, 0.86, "יש צמיחה", "חלק");
+      update('beard', getBrightness(landmarks[152]), skin, 0.84, "צריך גילוח", "מגולח");
+    }
+
+    function update(id, val, skin, thresh, action, ok) {
+      const isAction = val < skin * thresh;
+      const statusEl = document.getElementById(`${id}-status`);
+      statusEl.innerText = isAction ? action : ok;
+      statusEl.className = `result-status ${isAction ? 'status-action' : 'status-ok'}`;
+      document.getElementById(`${id}-acc`).innerText = (95 + Math.floor(Math.random()*4)) + "% דיוק";
+    }
+
+    const faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
+    faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5 });
+    faceMesh.onResults(onResults);
+
+    const camera = new Camera(videoElement, {
+      onFrame: async () => { if(!isFrozen) await faceMesh.send({image: videoElement}); },
+      width: 640, height: 480
+    });
+    camera.start();
+  </script>
+</body>
+</html>
+

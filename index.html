@@ -9,226 +9,205 @@
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
 
   <style>
-    :root {
-      --primary: #2c3e50;
-      --success: #27ae60;
-      --warning: #e67e22;
-      --bg: #f8f9fa;
-    }
-
-    /* מניעת גלילה של הדף */
-    html, body { 
-      margin: 0; padding: 0; 
-      height: 100%; width: 100%; 
-      overflow: hidden; 
-      background-color: var(--bg);
-      font-family: 'Segoe UI', system-ui, sans-serif;
-    }
-
+    :root { --dark: #2c3e50; --bg: #f4f7f9; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    
     body {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: space-between; /* פיזור אלמנטים על פני כל המסך */
-      padding: 10px 0;
-      box-sizing: border-box;
+      margin: 0; padding: 10px; background-color: var(--bg);
+      font-family: 'Assistant', system-ui, sans-serif;
+      display: flex; flex-direction: column; align-items: center;
+      height: 100vh; overflow: hidden;
     }
 
-    header { text-align: center; }
-    h1 { margin: 0; font-size: 1.8rem; color: var(--primary); }
-    .subtitle { color: #7f8c8d; font-size: 0.8rem; margin-top: 2px; }
+    .app-header { text-align: center; margin-bottom: 10px; }
+    .app-header h1 { font-size: 2rem; margin: 0; color: var(--dark); }
+    .app-header p { margin: 4px 0; color: #636e72; font-size: 1.1rem; font-weight: 500; }
 
-    /* תצוגת מצלמה ללא עיוות */
-    .viewport-container {
-      position: relative;
-      width: 280px; /* גודל אופטימלי למסך אחד */
-      height: 280px;
-      border-radius: 24px;
-      overflow: hidden;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-      border: 4px solid white;
-      background: #000;
+    #video-container {
+      width: 100%; max-width: 340px; aspect-ratio: 1/1;
+      background: #000; border-radius: 40px;
+      overflow: hidden; position: relative;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.1); margin-bottom: 15px;
     }
 
-    video, canvas {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      min-width: 100%;
-      min-height: 100%;
-      transform: translate(-50%, -50%);
-      object-fit: cover; /* שומר על יחס תמונה תקין */
+    video, canvas { 
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+      object-fit: cover;
     }
 
-    .controls { margin: 10px 0; }
+    .btn-group { width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 8px; }
 
-    .btn {
-      border: none;
-      padding: 12px 40px;
-      font-size: 1.1rem;
-      border-radius: 50px;
-      cursor: pointer;
-      font-weight: bold;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-      transition: background 0.3s;
+    .main-btn {
+      background: var(--dark); color: white; border: none;
+      padding: 14px; border-radius: 50px; font-size: 1.2rem; font-weight: bold;
+      cursor: pointer; width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;
     }
 
-    .btn-capture { background: var(--primary); color: white; }
-    .btn-reset { background: #bdc3c7; color: white; display: none; }
+    .secondary-btn {
+      background: #e1e8ed; border: none; color: var(--dark);
+      padding: 10px; border-radius: 50px; font-size: 1rem; font-weight: bold;
+      cursor: pointer; width: 100%;
+    }
 
-    /* אזור תוצאות דחוס למסך אחד */
     .results-grid {
-      width: 90%;
-      max-width: 350px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
+      width: 100%; max-width: 340px; display: grid;
+      grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 5px;
     }
 
     .result-card {
-      background: white;
-      padding: 10px 20px;
-      border-radius: 15px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+      background: white; padding: 10px; border-radius: 15px;
+      text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+      display: flex; flex-direction: column; border: 2px solid transparent;
     }
 
-    .result-label { font-weight: 600; color: #666; font-size: 0.9rem; width: 50px; }
-    .result-status { font-weight: 800; font-size: 1rem; flex-grow: 1; text-align: center; }
-    .result-acc { font-size: 0.7rem; color: #bdc3c7; width: 60px; text-align: left; }
+    .result-card.alert { border-color: #e67e22; background: #fff9f0; }
+    .label { font-size: 0.75rem; color: #636e72; margin-bottom: 2px; }
+    .value { font-size: 0.9rem; font-weight: bold; color: var(--dark); }
 
-    .status-ok { color: var(--success); }
-    .status-action { color: var(--warning); }
+    .tip-box {
+      margin-top: auto; padding: 10px 15px; background: #fff9db;
+      border-radius: 12px; font-size: 0.85rem; color: #856404;
+      display: flex; align-items: center; gap: 8px; width: 100%; max-width: 340px;
+      margin-bottom: 10px;
+    }
 
-    .lighting-tip {
-      font-size: 0.75rem;
-      color: #856404;
-      background: #fff3cd;
-      padding: 6px 15px;
-      border-radius: 8px;
-      margin-bottom: 5px;
+    #flash {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: white; opacity: 0; pointer-events: none; z-index: 10;
     }
   </style>
 </head>
-
 <body>
 
-  <header>
-    <h1>עמיקו ✨</h1>
-    <div class="subtitle">ניתוח טיפוח פנים בזמן אמת</div>
-  </header>
+  <div class="app-header">
+    <h1>✨ עמיקו</h1>
+    <p>למה לצאת ככה מהבית 🙂</p>
+  </div>
 
-  <div class="viewport-container">
-    <video id="input_video" autoplay playsinline></video>
+  <div id="video-container">
+    <video id="input_video" playsinline webkit-playsinline muted></video>
     <canvas id="output_canvas"></canvas>
+    <div id="flash"></div>
   </div>
 
-  <div class="controls">
-    <button id="capture-btn" class="btn btn-capture" onclick="takePhoto()">סרוק עכשיו 📸</button>
-    <button id="reset-btn" class="btn btn-reset" onclick="resetApp()">צילום מחדש</button>
+  <div class="btn-group">
+    <button id="capture-btn" class="main-btn">📸 צלם תמונה</button>
+    <button id="scan-btn" class="main-btn" style="display: none;">🔍 התחל סריקה</button>
+    <button id="reset-btn" class="secondary-btn" style="display: none;">🔄 צילום חדש</button>
   </div>
 
-  <div class="results-grid">
-    <div class="result-card">
-      <span class="result-label">גבות:</span>
-      <span id="eyebrows-status" class="result-status">-</span>
-      <span id="eyebrows-acc" class="result-acc"></span>
-    </div>
-    <div class="result-card">
-      <span class="result-label">שפם:</span>
-      <span id="mustache-status" class="result-status">-</span>
-      <span id="mustache-acc" class="result-acc"></span>
-    </div>
-    <div class="result-card">
-      <span class="result-label">זקן:</span>
-      <span id="beard-status" class="result-status">-</span>
-      <span id="beard-acc" class="result-acc"></span>
-    </div>
+  <div class="results-grid" id="results-box">
+    <div class="result-card" id="row-dye"><span class="label">צבע שיער:</span><span class="value">-</span></div>
+    <div class="result-card" id="row-hair"><span class="label">תספורת:</span><span class="value">-</span></div>
+    <div class="result-card" id="row-eyebrows"><span class="label">גבות:</span><span class="value">-</span></div>
+    <div class="result-card" id="row-mustache"><span class="label">שפם:</span><span class="value">-</span></div>
+    <div class="result-card" id="row-beard"><span class="label">זקן:</span><span class="value">-</span></div>
   </div>
 
-  <div class="lighting-tip">
-    💡 וודא תאורה חזקה לקבלת דיוק מקסימלי
+  <div class="tip-box">
+    💡 נדרש לוודא צילום בתאורה טובה לדיוק מקסימלי
   </div>
 
-  <script>
-    const videoElement = document.getElementById('input_video');
-    const canvasElement = document.getElementById('output_canvas');
-    const canvasCtx = canvasElement.getContext('2d');
-    let isFrozen = false;
-    let latestLandmarks = null;
+<script>
+const videoElement = document.getElementById('input_video');
+const canvasElement = document.getElementById('output_canvas');
+const canvasCtx = canvasElement.getContext('2d', {willReadFrequently: true});
+const captureBtn = document.getElementById('capture-btn');
+const scanBtn = document.getElementById('scan-btn');
+const resetBtn = document.getElementById('reset-btn');
+const flash = document.getElementById('flash');
 
-    function onResults(results) {
-      if (isFrozen) return;
+let isFrozen = false;
+let lastResult = null;
 
-      // עדכון גודל הקנבס לפי הווידאו למניעת עיוות
-      canvasElement.width = videoElement.videoWidth;
-      canvasElement.height = videoElement.videoHeight;
+const faceMesh = new FaceMesh({
+  locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+});
 
-      canvasCtx.save();
-      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.6 });
+faceMesh.onResults(onResults);
 
-      if (results.multiFaceLandmarks) {
-        latestLandmarks = results.multiFaceLandmarks[0];
-        // אנחנו לא מציירים כאן שום דבר (אין רשת!)
-      }
-      canvasCtx.restore();
-    }
+const camera = new Camera(videoElement, {
+  onFrame: async () => { if (!isFrozen) await faceMesh.send({image: videoElement}); },
+  width: 640, height: 480
+});
+camera.start();
 
-    function takePhoto() {
-      if (!latestLandmarks) return;
-      isFrozen = true;
-      document.getElementById('capture-btn').style.display = 'none';
-      document.getElementById('reset-btn').style.display = 'block';
-      analyzeGrooming(latestLandmarks);
-    }
+function onResults(results) {
+  const vWidth = results.image.width;
+  const vHeight = results.image.height;
+  
+  if (!canvasElement.width) {
+    canvasElement.width = 640;
+    canvasElement.height = 640;
+  }
 
-    function resetApp() {
-      isFrozen = false;
-      document.getElementById('capture-btn').style.display = 'block';
-      document.getElementById('reset-btn').style.display = 'none';
-      ['eyebrows', 'mustache', 'beard'].forEach(id => {
-        document.getElementById(`${id}-status`).innerText = "-";
-        document.getElementById(`${id}-status`).className = "result-status";
-        document.getElementById(`${id}-acc`).innerText = "";
-      });
-    }
+  canvasCtx.save();
+  canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+  
+  const minSide = Math.min(vWidth, vHeight);
+  const sx = (vWidth - minSide) / 2;
+  const sy = (vHeight - minSide) / 2;
 
-    function analyzeGrooming(landmarks) {
-      const getBrightness = (p) => {
-        const x = Math.floor(p.x * canvasElement.width);
-        const y = Math.floor(p.y * canvasElement.height);
-        const d = canvasCtx.getImageData(x, y, 1, 1).data;
-        return (d[0] + d[1] + d[2]) / 3;
-      };
+  canvasCtx.drawImage(results.image, sx, sy, minSide, minSide, 0, 0, canvasElement.width, canvasElement.height);
 
-      const skin = getBrightness(landmarks[10]); // מצח
-      
-      update('eyebrows', getBrightness(landmarks[70]), skin, 0.78, "צריך סידור", "נראה טוב");
-      update('mustache', getBrightness({x:(landmarks[1].x+landmarks[13].x)/2, y:(landmarks[1].y+landmarks[13].y)/2}), skin, 0.86, "יש צמיחה", "חלק");
-      update('beard', getBrightness(landmarks[152]), skin, 0.84, "צריך גילוח", "מגולח");
-    }
+  if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+    lastResult = results.multiFaceLandmarks[0].map(p => ({
+        x: (p.x * vWidth - sx) / minSide,
+        y: (p.y * vHeight - sy) / minSide,
+        z: p.z
+    }));
+  }
+  canvasCtx.restore();
+}
 
-    function update(id, val, skin, thresh, action, ok) {
-      const isAction = val < skin * thresh;
-      const statusEl = document.getElementById(`${id}-status`);
-      statusEl.innerText = isAction ? action : ok;
-      statusEl.className = `result-status ${isAction ? 'status-action' : 'status-ok'}`;
-      document.getElementById(`${id}-acc`).innerText = (95 + Math.floor(Math.random()*4)) + "% דיוק";
-    }
+function analyzeGrooming() {
+  if (!lastResult) return;
+  const getBrightness = (p) => {
+    const x = Math.max(0, Math.min(canvasElement.width - 1, Math.floor(p.x * canvasElement.width)));
+    const y = Math.max(0, Math.min(canvasElement.height - 1, Math.floor(p.y * canvasElement.height)));
+    const d = canvasCtx.getImageData(x, y, 1, 1).data;
+    return (d[0] + d[1] + d[2]) / 3;
+  };
 
-    const faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
-    faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5 });
-    faceMesh.onResults(onResults);
+  const skin = getBrightness(lastResult[10]); 
+  const hair = getBrightness({ x: lastResult[10].x, y: lastResult[10].y - 0.08 });
+  const dyeRatio = hair / skin;
 
-    const camera = new Camera(videoElement, {
-      onFrame: async () => { if(!isFrozen) await faceMesh.send({image: videoElement}); },
-      width: 640, height: 480
-    });
-    camera.start();
-  </script>
+  updateCard('dye', dyeRatio > 0.85, "צריך לצבוע", "צבע תקין");
+  updateCard('hair', (hair / skin) < 0.70, "להסתפר", "מסודר");
+  updateCard('eyebrows', (getBrightness(lastResult[285]) / skin) < 0.75, "לסדר", "תקין");
+  const mP = {x: (lastResult[205].x + lastResult[425].x)/2, y: (lastResult[205].y + lastResult[425].y)/2};
+  updateCard('mustache', (getBrightness(mP) / skin) < 0.82, "יש צמיחה", "חלק");
+  updateCard('beard', (getBrightness(lastResult[152]) / skin) < 0.82, "להתגלח", "מגולח");
+}
+
+function updateCard(id, cond, act, ok) {
+  const card = document.getElementById(`row-${id}`);
+  const val = card.querySelector('.value');
+  val.innerText = cond ? act : ok;
+  card.className = 'result-card' + (cond ? ' alert' : '');
+}
+
+captureBtn.onclick = () => {
+  flash.style.opacity = "1";
+  setTimeout(() => flash.style.opacity = "0", 150);
+  isFrozen = true;
+  videoElement.pause();
+  captureBtn.style.display = 'none';
+  scanBtn.style.display = 'flex';
+  resetBtn.style.display = 'block';
+};
+
+scanBtn.onclick = () => { analyzeGrooming(); scanBtn.style.display = 'none'; };
+
+resetBtn.onclick = () => {
+  isFrozen = false; videoElement.play();
+  captureBtn.style.display = 'flex';
+  scanBtn.style.display = 'none'; resetBtn.style.display = 'none';
+  document.querySelectorAll('.value').forEach(v => v.innerText = '-');
+  document.querySelectorAll('.result-card').forEach(c => c.className = 'result-card');
+};
+</script>
 </body>
 </html>
-
